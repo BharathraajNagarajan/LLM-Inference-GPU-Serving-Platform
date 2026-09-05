@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
+*.env.local
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Results / benchmark artifacts (keep the directory, ignore generated data)
+results/*.csv
+results/*.json
+results/*.log
+results/*.png
+!results/.gitkeep
+
+# Docker
+*.pid
+
+# Type checkers / linters
+.mypy_cache/
+.ruff_cache/

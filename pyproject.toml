@@ -1,0 +1,41 @@
+[project]
+name = "llm-inference-gpu-serving-platform"
+version = "0.1.0"
+description = "LLM Inference & GPU Serving Platform"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "vllm>=0.4.0",
+    "torch>=2.1.0",
+    "transformers>=4.38.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.6.0",
+    "pynvml>=11.5.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["src*", "benchmark*", "metrics*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: loads a real model and/or hits a real endpoint; excluded from fast runs via -m 'not slow'",
+]
+
+# NOTE: These are minimum-version constraints, not verified-compatible pins.
+# Before running any real GPU workload:
+#   - Check torch's CUDA build against the driver-reported CUDA version
+#     (nvidia-smi showed CUDA 11.0 / driver 451.67 on this machine — that is
+#     an old driver, so a very recent torch/vllm CUDA wheel may not be
+#     compatible; verify with `nvidia-smi` and the torch/vllm install docs).
+#   - Check vllm's supported torch/CUDA/GPU-compute-capability matrix
+#     (vllm has historically required fairly recent CUDA and specific torch
+#     versions; do not assume `pip install vllm` will "just work" on an
+#     older driver or a low-VRAM card like the GTX 1050 found here).
+#   - Re-pin exact versions once compatibility is confirmed by an actual
+#     `pip install` + import/smoke-test, not before.
