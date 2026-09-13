@@ -8,6 +8,7 @@ This is the "baseline behind an API" step, bridging toward the vLLM
 integration later.
 """
 
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -20,6 +21,17 @@ MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
 DEFAULT_MAX_NEW_TOKENS = 64
 
 model_state: dict = {}
+
+# threading.Lock, not asyncio.Lock: the /generate handler below is a sync
+# `def`, which FastAPI runs in a worker thread pool (not on the asyncio
+# event loop), so concurrent requests are already separate OS threads and
+# an asyncio.Lock would not coordinate them at all. model.generate() is
+# also a blocking call with no async-native equivalent, so making the
+# endpoint `async def` would buy nothing here and would risk stalling the
+# event loop if the lock were ever awaited incorrectly. This lock makes
+# that thread-pool serialization explicit and enforced, rather than
+# relying on incidental GIL/CUDA scheduling.
+generate_lock = threading.Lock()
 
 
 @asynccontextmanager
@@ -87,7 +99,7 @@ def generate(request: GenerateRequest) -> GenerateResponse:
     num_input_tokens = input_ids.shape[-1]
 
     generate_start = time.perf_counter()
-    with torch.inference_mode():
+    with generate_lock, torch.inference_mode():
         output_ids = model.generate(
             input_ids,
             attention_mask=encoded["attention_mask"],
