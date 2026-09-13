@@ -29,6 +29,7 @@ def summarize_level(
     backend: str,
     concurrency_level: int,
     wall_clock_s: float,
+    gpu_telemetry: dict | None = None,
 ) -> dict:
     """Summarize all records for one (backend, concurrency_level) run.
 
@@ -36,6 +37,13 @@ def summarize_level(
     receiving the whole batch of requests at this concurrency level —
     used for throughput, since per-request latency alone does not
     capture overlap between concurrent requests.
+
+    gpu_telemetry, if given, is the dict returned by
+    GpuTelemetryCollector.stop() for this same batch and is merged in
+    as-is (gpu_telemetry_available, gpu_telemetry_sample_count,
+    gpu_util_pct_min/mean/max, gpu_mem_used_mib_min/mean/max). Passing
+    None leaves those keys out entirely, so existing callers/tests that
+    don't collect telemetry are unaffected.
     """
     successes = [r for r in records if r.success]
     failures = [r for r in records if not r.success]
@@ -70,4 +78,8 @@ def summarize_level(
         "latency_s_p95": _percentile(latencies, 0.95) if latencies else None,
         "errors": [r.error for r in failures],
     }
+
+    if gpu_telemetry is not None:
+        summary.update(gpu_telemetry)
+
     return summary
