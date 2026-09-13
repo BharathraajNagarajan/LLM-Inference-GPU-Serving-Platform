@@ -21,8 +21,11 @@ from pathlib import Path
 import httpx
 
 from metrics.aggregate import summarize_level
+from metrics.gpu_telemetry import GpuTelemetryCollector
 from metrics.io import write_raw_csv, write_summary_json
 from metrics.records import RequestRecord
+
+GPU_TELEMETRY_INTERVAL_S = 0.2
 
 BACKEND_LABEL = "naive_fastapi_baseline"
 MAX_VERIFIED_CONCURRENCY = 4
@@ -168,16 +171,39 @@ def main() -> int:
     all_records: list[RequestRecord] = []
     all_summaries: list[dict] = []
 
-    for level in levels:
-        records, wall_clock_s = run_level(
-            base_url, level, args.requests_per_level, args.max_new_tokens, args.timeout_s
-        )
-        all_records.extend(records)
-        summary = summarize_level(records, BACKEND_LABEL, level, wall_clock_s)
-        all_summaries.append(summary)
-        print(f"  -> throughput: {summary['throughput_req_per_s']:.3f} req/s, "
-              f"output tokens/s: {summary['output_tokens_per_s']:.2f}, "
-              f"p95 latency: {summary['latency_s_p95']}")
+    # One collector for the whole run: pynvml init (and its failure warning,
+    # if any) happens once here, not once per concurrency level.
+    gpu_telemetry = GpuTelemetryCollector(interval_s=GPU_TELEMETRY_INTERVAL_S)
+    try:
+        for level in levels:
+            gpu_telemetry.start()
+            records, wall_clock_s = run_level(
+                base_url, level, args.requests_per_level, args.max_new_tokens, args.timeout_s
+            )
+            gpu_stats = gpu_telemetry.stop()
+
+            all_records.extend(records)
+            summary = summarize_level(
+                records, BACKEND_LABEL, level, wall_clock_s, gpu_telemetry=gpu_stats
+            )
+            all_summaries.append(summary)
+            print(f"  -> throughput: {summary['throughput_req_per_s']:.3f} req/s, "
+                  f"output tokens/s: {summary['output_tokens_per_s']:.2f}, "
+                  f"p95 latency: {summary['latency_s_p95']}")
+            if gpu_stats["gpu_telemetry_available"] and gpu_stats["gpu_telemetry_sample_count"] > 0:
+                print(
+                    f"  -> GPU util % (min/mean/max): "
+                    f"{gpu_stats['gpu_util_pct_min']:.1f}/"
+                    f"{gpu_stats['gpu_util_pct_mean']:.1f}/"
+                    f"{gpu_stats['gpu_util_pct_max']:.1f}, "
+                    f"GPU mem MiB (min/mean/max): "
+                    f"{gpu_stats['gpu_mem_used_mib_min']:.1f}/"
+                    f"{gpu_stats['gpu_mem_used_mib_mean']:.1f}/"
+                    f"{gpu_stats['gpu_mem_used_mib_max']:.1f} "
+                    f"({gpu_stats['gpu_telemetry_sample_count']} samples)"
+                )
+    finally:
+        gpu_telemetry.shutdown()
 
     raw_csv_path = output_dir / f"naive_baseline_{timestamp}_raw.csv"
     summary_json_path = output_dir / f"naive_baseline_{timestamp}_summary.json"
