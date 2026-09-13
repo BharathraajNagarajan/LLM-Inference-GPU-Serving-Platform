@@ -121,7 +121,18 @@ All of the above are computed directly from observed per-request data; nothing i
 
 ## 8. Actual Benchmark Results
 
-No results yet — this section will only be filled with real measured data from actual benchmark runs, never estimated or invented numbers.
+Data source: [`results/naive_baseline_20260905T040629Z_summary.json`](results/naive_baseline_20260905T040629Z_summary.json), a single run of the naive FastAPI baseline (`backend: "naive_fastapi_baseline"`) with `max_new_tokens=32` and `requests_per_level=6`, at concurrency levels 1, 2, and 4. All numbers below are copied directly from that file.
+
+| Concurrency | Successful/Total | Wall-clock (s) | Throughput (req/s) | Output tok/s | Latency mean (s) | Latency median (s) | Latency p95 (s) |
+|---|---|---|---|---|---|---|---|
+| 1 | 6/6 | 8.6010 | 0.6976 | 5.5808 | 1.4333 | 0.5212 | 4.6485 |
+| 2 | 6/6 | 2.5013 | 2.3988 | 19.1903 | 0.7708 | 0.7128 | 0.9710 |
+| 4 | 6/6 | 2.1909 | 2.7386 | 21.9091 | 1.2581 | 1.4057 | 1.6438 |
+
+**Caveats — read before drawing conclusions:**
+- **Single run, small sample.** Each concurrency level reflects one run of only 6 requests. There is no repetition and no variance/confidence interval; these numbers should be treated as a single observed data point, not a stable estimate.
+- **No warm-up (known confound, see [Section 7](#7-benchmark-methodology)).** No warm-up request was issued before measuring, so one-time CUDA/kernel warm-up cost is included in the timings — most visibly at concurrency 1, where `latency_s_max` (5.98s, not shown above but present in the raw summary) and the resulting `latency_s_mean`/`latency_s_p95` are pulled well above `latency_s_median`, consistent with one slow first request skewing a small batch. This is why concurrency 1's mean/p95 look disproportionately worse than concurrency 2's despite less contention.
+- These results are for the naive synchronous baseline only (no batching, no vLLM). They establish a "before" reference point and are not a comparison yet — no vLLM numbers exist at this time.
 
 ## 9. Interpretation
 
