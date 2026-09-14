@@ -1,0 +1,18 @@
+# k8s/service.yaml
+#
+# STATUS: written and syntax-validated only. This has NOT been applied to
+# any live Kubernetes cluster. See k8s/README.md.
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-inference-server
+  labels:
+    app: llm-inference-server
+spec:
+  type: ClusterIP
+  selector:
+    app: llm-inference-server
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

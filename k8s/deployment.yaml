@@ -1,0 +1,91 @@
+# k8s/deployment.yaml
+#
+# STATUS: written and syntax-validated only. This has NOT been applied to
+# any live Kubernetes cluster — no GPU-enabled cluster is available in
+# this project's environment right now. See k8s/README.md before reading
+# any claim about this as "deployed" or "running."
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-inference-server
+  labels:
+    app: llm-inference-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llm-inference-server
+  template:
+    metadata:
+      labels:
+        app: llm-inference-server
+    spec:
+      containers:
+        - name: llm-inference-server
+          # Placeholder image name. Assumes a Dockerfile (not yet written —
+          # docker/ is currently empty) will eventually be built and
+          # tagged as:
+          #   docker build -t llm-inference-gpu-serving-platform:latest -f docker/Dockerfile .
+          image: llm-inference-gpu-serving-platform:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+              # Standard Kubernetes GPU resource type. Requesting 1 whole
+              # GPU because this server holds one model resident on one
+              # device with no MIG/time-slicing. Requires a cluster whose
+              # GPU nodes have the NVIDIA device plugin
+              # (k8s-device-plugin) installed — without it this resource
+              # type doesn't exist on any node and the pod stays Pending
+              # indefinitely (unschedulable), rather than failing loudly.
+              nvidia.com/gpu: 1
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+              # GPU requests and limits must be equal — Kubernetes does
+              # not allow overcommitting/bursting GPU resources the way
+              # it allows CPU/memory.
+              nvidia.com/gpu: 1
+          # Both probes hit /health (src/server/main.py), added
+          # specifically for this: it returns 200 only once the model
+          # has finished loading in the FastAPI lifespan hook, mirroring
+          # the same model_state load-check used there. Note also that
+          # this server's lifespan hook runs to completion (including the
+          # full model load) before Uvicorn starts accepting any TCP
+          # connections at all — so before the model is ready, these
+          # probes will observe connection failures, not a non-200 HTTP
+          # response, and Kubernetes treats both the same way for probe
+          # purposes.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            # initialDelaySeconds is set from real observed model-load
+            # time, not a guess: local dev server startups this session
+            # (Qwen2.5-0.5B-Instruct, GTX 1050, torch cu118 build)
+            # printed "Model loaded in Xs" at 10.49s, 9.99s, 10.85s, and
+            # 6.45s across 4 separate runs (see server startup logs).
+            # 30s gives roughly 3x margin over the observed max, since a
+            # fresh container (image pull, cold HF cache) could plausibly
+            # be slower than these already-warm local runs — this margin
+            # is a safety buffer, not itself a measurement of container
+            # cold-start time, which has not been observed.
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            failureThreshold: 6
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            # Longer initialDelaySeconds than readinessProbe so liveness
+            # doesn't start restarting the pod while it's merely still
+            # waiting on readiness during a slow cold start.
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 3
