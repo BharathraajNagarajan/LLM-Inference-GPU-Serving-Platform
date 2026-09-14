@@ -121,17 +121,17 @@ All of the above are computed directly from observed per-request data; nothing i
 
 ## 8. Actual Benchmark Results
 
-Data source: [`results/naive_baseline_20260905T040629Z_summary.json`](results/naive_baseline_20260905T040629Z_summary.json), a single run of the naive FastAPI baseline (`backend: "naive_fastapi_baseline"`) with `max_new_tokens=32` and `requests_per_level=6`, at concurrency levels 1, 2, and 4. All numbers below are copied directly from that file.
+Data source: [`results/naive_baseline_20260914T041932Z_summary.json`](results/naive_baseline_20260914T041932Z_summary.json), a single run of the naive FastAPI baseline (`backend: "naive_fastapi_baseline"`) with `max_new_tokens=32` and `requests_per_level=6`, at concurrency levels 1, 2, and 4, with GPU telemetry sampling (via `pynvml`, every 200ms) enabled at every level. This is the authoritative naive-baseline dataset — it supersedes the two earlier partial runs (one covering latency/throughput only at 1/2/4, one covering GPU telemetry only at 1/2). All numbers below are copied directly from that one summary file; none are blended from the earlier runs.
 
-| Concurrency | Successful/Total | Wall-clock (s) | Throughput (req/s) | Output tok/s | Latency mean (s) | Latency median (s) | Latency p95 (s) |
-|---|---|---|---|---|---|---|---|
-| 1 | 6/6 | 8.6010 | 0.6976 | 5.5808 | 1.4333 | 0.5212 | 4.6485 |
-| 2 | 6/6 | 2.5013 | 2.3988 | 19.1903 | 0.7708 | 0.7128 | 0.9710 |
-| 4 | 6/6 | 2.1909 | 2.7386 | 21.9091 | 1.2581 | 1.4057 | 1.6438 |
+| Concurrency | Successful/Total | Wall-clock (s) | Throughput (req/s) | Output tok/s | Latency mean (s) | Latency median (s) | Latency p95 (s) | GPU util % (min/mean/max) | GPU mem MiB (min/mean/max) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 6/6 | 14.4304 | 0.4158 | 3.3263 | 2.4048 | 0.7831 | 8.2584 | 0.0 / 11.34 / 47.0 | 1111.29 / 1456.15 / 1637.92 |
+| 2 | 6/6 | 3.4750 | 1.7266 | 13.8131 | 1.0691 | 1.1223 | 1.2356 | 33.0 / 45.5 / 56.0 | 1637.92 / 1644.42 / 1645.92 |
+| 4 | 6/6 | 3.4741 | 1.7271 | 13.8166 | 1.7446 | 2.0218 | 2.3405 | 37.0 / 47.375 / 56.0 | 1645.92 / 1667.42 / 1681.92 |
 
 **Caveats — read before drawing conclusions:**
-- **Single run, small sample.** Each concurrency level reflects one run of only 6 requests. There is no repetition and no variance/confidence interval; these numbers should be treated as a single observed data point, not a stable estimate.
-- **No warm-up (known confound, see [Section 7](#7-benchmark-methodology)).** No warm-up request was issued before measuring, so one-time CUDA/kernel warm-up cost is included in the timings — most visibly at concurrency 1, where `latency_s_max` (5.98s, not shown above but present in the raw summary) and the resulting `latency_s_mean`/`latency_s_p95` are pulled well above `latency_s_median`, consistent with one slow first request skewing a small batch. This is why concurrency 1's mean/p95 look disproportionately worse than concurrency 2's despite less contention.
+- **Single run, small sample.** Each concurrency level reflects one run of only 6 requests. There is no repetition and no variance/confidence interval; these numbers should be treated as a single observed data point, not a stable estimate. GPU telemetry sample counts also differ across levels (62 samples at concurrency 1 vs. 16 at concurrency 2 and 4) simply because the fixed 200ms polling interval was applied over a longer wall-clock window at concurrency 1 — not because more or fewer measurements were "available."
+- **No warm-up (known confound, see [Section 7](#7-benchmark-methodology)).** No warm-up request was issued before measuring, so one-time CUDA/kernel warm-up cost is included in the timings — most visibly at concurrency 1, where `latency_s_max` (10.67s) and the resulting `latency_s_mean`/`latency_s_p95` are pulled well above `latency_s_median`, consistent with one slow first request skewing a small batch. This is why concurrency 1's mean/p95 look disproportionately worse than concurrency 2's and 4's despite less contention. The same cold-start request is also visible in the GPU utilization numbers: concurrency 1's mean utilization (11.34%) is pulled down by idle gaps between the six sequential, mostly-fast requests, while its max (47.0%) reflects a brief compute burst during generation.
 - These results are for the naive synchronous baseline only (no batching, no vLLM). They establish a "before" reference point and are not a comparison yet — no vLLM numbers exist at this time.
 
 ## 9. Interpretation
