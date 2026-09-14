@@ -171,7 +171,20 @@ This section is an inventory of what actually happens today, observed directly f
 
 ## 13. Future Work
 
-The following are intentionally out of scope for the current phase of this project:
+### Remaining work toward the project's stated goal
+
+- **vLLM integration — the main remaining piece.** `pyproject.toml` already isolates `vllm>=0.4.0` in its own `vllm` optional extra, separate from the base install, specifically so it can be installed and exercised without disturbing the naive baseline's dependencies (see [Section 4](#4-local-setup)'s Docker note and `pyproject.toml`). Compatibility with this machine's driver (CUDA 11.0 in the `nvidia-smi` header) and its 3GB-VRAM GTX 1050 is unverified and should be treated as a real open question, not an assumption — `pyproject.toml`'s own comment already flags this.
+- **Naive-vs-vLLM comparison experiment.** Once vLLM is running, exercise it with the same `benchmark/run_benchmark.py` harness and `metrics/gpu_telemetry.py` telemetry already built for the naive baseline (see [Section 7](#7-benchmark-methodology) and [Section 8](#8-actual-benchmark-results)), producing a separately-labeled (e.g. `backend: "vllm"`) result set alongside — never merged into — the existing `naive_fastapi_baseline` one, so the two can actually be compared instead of just juxtaposed.
+- **Actually build and run `docker/Dockerfile`.** Currently written and manually reviewed only (see the Docker note in [Section 4](#4-local-setup)); needs a real `docker build` and a real `docker run --gpus ...` on stable network to confirm it works at all.
+- **Actually apply the `k8s/` manifests to a real cluster, if one becomes available.** Currently written and syntax-validated only (see [Section 10](#10-kubernetes-deployment) and [`k8s/README.md`](k8s/README.md)); no GPU-enabled cluster exists to test against yet.
+- **Basic request validation / max-token capping.** Directly implied by [Section 11](#11-failure-reliability-considerations)'s observation that nothing today caps prompt length or `max_new_tokens`/`max_tokens`; a minimal server-side cap (rejecting oversized requests with a 4xx) is realistic scope here, unlike the heavier reliability work below.
+- **Repeated benchmark runs per concurrency level.** Directly implied by [Section 8](#8-actual-benchmark-results) and [Section 12](#12-limitations)'s caveats about single-run, small-sample results; this needs no new infrastructure, just running the existing harness more than once and reporting variance instead of a single number.
+
+Other gaps [Section 11](#11-failure-reliability-considerations) documents — retry/backoff, graceful degradation on model-load failure, request timeouts, authentication/rate-limiting — are real, but are deliberately not listed as near-term work: this project is a serving/benchmarking comparison, not a production API, and hardening it into one would grow scope well past that goal.
+
+### Intentionally out of scope
+
+The following remain intentionally out of scope for this project:
 
 - Multi-GPU serving (tensor parallelism / pipeline parallelism across multiple devices)
 - Custom CUDA kernels
@@ -179,4 +192,4 @@ The following are intentionally out of scope for the current phase of this proje
 - Quantization (e.g. INT8/INT4/AWQ/GPTQ) of model weights
 - Autoscaling (horizontal scaling of serving replicas based on load)
 
-These may be revisited after the core single-GPU serving and benchmarking loop is implemented and measured.
+These may be revisited after the core single-GPU serving and benchmarking loop — including the vLLM comparison above — is implemented and measured.
