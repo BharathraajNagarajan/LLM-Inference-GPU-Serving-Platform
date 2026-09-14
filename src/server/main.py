@@ -10,6 +10,7 @@ integration later.
 
 import threading
 import time
+import uuid
 from contextlib import asynccontextmanager
 
 import torch
@@ -81,13 +82,51 @@ class GenerateResponse(BaseModel):
     generation_time_s: float
 
 
-@app.post("/generate", response_model=GenerateResponse)
-def generate(request: GenerateRequest) -> GenerateResponse:
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatCompletionRequest(BaseModel):
+    model: str
+    messages: list[ChatMessage]
+    max_tokens: int | None = None
+
+
+class ChatCompletionChoice(BaseModel):
+    index: int
+    message: ChatMessage
+    finish_reason: str
+
+
+class ChatCompletionUsage(BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class ChatCompletionResponse(BaseModel):
+    id: str
+    object: str = "chat.completion"
+    created: int
+    model: str
+    choices: list[ChatCompletionChoice]
+    usage: ChatCompletionUsage
+
+
+def _generate_completion(messages: list[dict], max_new_tokens: int) -> dict:
+    """Shared generation path for both /generate and /v1/chat/completions.
+
+    Tokenizes `messages` via the chat template, runs model.generate()
+    once under generate_lock, and returns token counts, completion text,
+    timing, and an OpenAI-style finish_reason: "stop" if generation ended
+    on the model's own EOS token, "length" if it was cut off by
+    max_new_tokens first.
+    """
     tokenizer = model_state["tokenizer"]
     model = model_state["model"]
     device = model_state["device"]
 
-    messages = [{"role": "user", "content": request.prompt}]
     encoded = tokenizer.apply_chat_template(
         messages,
         add_generation_prompt=True,
@@ -103,7 +142,7 @@ def generate(request: GenerateRequest) -> GenerateResponse:
         output_ids = model.generate(
             input_ids,
             attention_mask=encoded["attention_mask"],
-            max_new_tokens=request.max_new_tokens,
+            max_new_tokens=max_new_tokens,
             do_sample=False,
         )
     if device == "cuda":
@@ -114,9 +153,63 @@ def generate(request: GenerateRequest) -> GenerateResponse:
     num_output_tokens = new_tokens.shape[-1]
     completion_text = tokenizer.decode(new_tokens, skip_special_tokens=True)
 
+    ended_on_eos = (
+        num_output_tokens > 0
+        and tokenizer.eos_token_id is not None
+        and new_tokens[-1].item() == tokenizer.eos_token_id
+    )
+    finish_reason = "stop" if ended_on_eos else "length"
+
+    return {
+        "completion_text": completion_text,
+        "num_input_tokens": num_input_tokens,
+        "num_output_tokens": num_output_tokens,
+        "generation_time_s": generation_time,
+        "finish_reason": finish_reason,
+    }
+
+
+# /generate is the original simple endpoint (single prompt in, single
+# completion out). /v1/chat/completions is the OpenAI-compatible endpoint,
+# added because vLLM's server is natively OpenAI-compatible — matching its
+# request/response contract here makes the eventual naive-vs-vLLM
+# benchmark comparison apples-to-apples instead of just a keyword match.
+@app.post("/generate", response_model=GenerateResponse)
+def generate(request: GenerateRequest) -> GenerateResponse:
+    result = _generate_completion(
+        messages=[{"role": "user", "content": request.prompt}],
+        max_new_tokens=request.max_new_tokens,
+    )
     return GenerateResponse(
-        completion=completion_text,
-        input_tokens=num_input_tokens,
-        output_tokens=num_output_tokens,
-        generation_time_s=generation_time,
+        completion=result["completion_text"],
+        input_tokens=result["num_input_tokens"],
+        output_tokens=result["num_output_tokens"],
+        generation_time_s=result["generation_time_s"],
+    )
+
+
+@app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+def chat_completions(request: ChatCompletionRequest) -> ChatCompletionResponse:
+    max_new_tokens = (
+        request.max_tokens if request.max_tokens is not None else DEFAULT_MAX_NEW_TOKENS
+    )
+    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    result = _generate_completion(messages=messages, max_new_tokens=max_new_tokens)
+
+    return ChatCompletionResponse(
+        id=f"chatcmpl-{uuid.uuid4().hex}",
+        created=int(time.time()),
+        model=request.model,
+        choices=[
+            ChatCompletionChoice(
+                index=0,
+                message=ChatMessage(role="assistant", content=result["completion_text"]),
+                finish_reason=result["finish_reason"],
+            )
+        ],
+        usage=ChatCompletionUsage(
+            prompt_tokens=result["num_input_tokens"],
+            completion_tokens=result["num_output_tokens"],
+            total_tokens=result["num_input_tokens"] + result["num_output_tokens"],
+        ),
     )
