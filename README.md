@@ -140,7 +140,9 @@ TODO: fill in after implementation.
 
 ## 10. Kubernetes Deployment
 
-TODO: fill in after implementation. When this section is filled in, it must explicitly state whether the Kubernetes manifests in `k8s/` were only written and/or locally validated (e.g. `kubectl apply --dry-run`, schema/lint checks) versus actually applied to and exercised on a live GPU-enabled cluster. These are materially different claims and must not be conflated.
+**Status: manifests written and syntax-validated only — NOT applied to any live cluster.** `k8s/deployment.yaml` and `k8s/service.yaml` exist and were validated as well-formed YAML and checked with `kubectl apply --dry-run=client`, but no GPU-enabled Kubernetes cluster is available in this project's environment, so no pod described by them has ever actually started or served a request. See [`k8s/README.md`](k8s/README.md) for the full status note, what's in each manifest, and the known gaps (no `Dockerfile` yet, GPU scheduling unverified in practice) before this could actually be applied.
+
+TODO: fill in an actual apply/run narrative once a GPU-enabled cluster is available — at that point this section must explicitly say whether the manifests were only dry-run/schema-validated versus actually applied to and exercised on a live cluster. These are materially different claims and must not be conflated.
 
 ## 11. Failure/Reliability Considerations
 

@@ -14,7 +14,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 import torch
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -167,6 +167,22 @@ def _generate_completion(messages: list[dict], max_new_tokens: int) -> dict:
         "generation_time_s": generation_time,
         "finish_reason": finish_reason,
     }
+
+
+@app.get("/health")
+def health() -> dict:
+    """Used by the k8s readiness/liveness probes (see k8s/deployment.yaml).
+
+    Same load-check as the lifespan hook: model_state is only populated
+    once the model has finished loading, so a 200 here means this
+    instance is actually ready to serve /generate and
+    /v1/chat/completions. Deliberately does not take generate_lock — a
+    probe should stay fast and answerable even while a generation is
+    in flight.
+    """
+    if "model" not in model_state:
+        raise HTTPException(status_code=503, detail="model not loaded yet")
+    return {"status": "ok"}
 
 
 # /generate is the original simple endpoint (single prompt in, single
