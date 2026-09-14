@@ -1,0 +1,27 @@
+# Enforces "copy only src/ and pyproject.toml" from docker/Dockerfile.
+# Docker only honors a .dockerignore at the build context root — the
+# Dockerfile lives in docker/ but the build context is the repo root
+# (see docker/Dockerfile's header comment), so this file lives here too,
+# not in docker/.
+
+.git
+.gitignore
+.dockerignore
+.env
+.env.example
+
+venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+
+results/
+docs/
+k8s/
+docker/
+
+tests/
+benchmark/
+metrics/
+
+README.md

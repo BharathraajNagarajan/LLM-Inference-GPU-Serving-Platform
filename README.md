@@ -68,6 +68,10 @@ Then install dependencies (see [GPU Setup](#5-gpu-setup) below for why `torch` n
 
 TODO: fill in remaining local setup instructions (server startup, config via `.env`) once `src/server/` is implemented.
 
+### Docker (status: written, NOT yet built or run)
+
+[`docker/Dockerfile`](docker/Dockerfile) containerizes the FastAPI server (`src/server/main.py`) on `python:3.10-slim`, installing the same CUDA (cu118) torch wheel verified in [Section 5](#5-gpu-setup) below rather than letting it silently resolve to CPU-only. **This Dockerfile has been written and manually reviewed only — `docker build` has deliberately not been run against it.** It was written on a limited/mobile connection where pulling a ~150MB+ base image plus the CUDA torch wheel was not practical; no linter (`hadolint`) was available locally either, so it has not been machine-validated beyond careful manual review. Do not read "the Dockerfile exists" as "the image has been built" or "the container has been run" — neither has happened yet. Building and running it end-to-end (and updating this note with the real result) is deferred to when stable network is available.
+
 ## 5. GPU Setup
 
 This machine has an NVIDIA GeForce GTX 1050 (3 GB VRAM). `nvidia-smi` reports driver version 451.67 with a max supported CUDA version of **11.0** in its header.
@@ -83,7 +87,7 @@ This installed `torch==2.7.1+cu118` (CUDA 11.8 build). Note the version tension:
 
 If CUDA is unavailable at run time, code in this project is expected to fall back to CPU with an explicit printed warning (see `src/baseline/naive_inference.py`) rather than failing silently or fabricating GPU results.
 
-TODO: fill in remaining GPU setup notes (e.g. any container/driver-level GPU passthrough config) once `docker/` and `k8s/` have real content.
+TODO: fill in remaining GPU setup notes (e.g. actual container/driver-level GPU passthrough behavior — `nvidia-container-toolkit` config, a real `docker run --gpus` test) once [`docker/Dockerfile`](docker/Dockerfile) has actually been built and run; see the Docker note above and [`k8s/README.md`](k8s/README.md) for what exists today (written, not yet built/deployed) versus what's still untested.
 
 ## 6. API Example
 
