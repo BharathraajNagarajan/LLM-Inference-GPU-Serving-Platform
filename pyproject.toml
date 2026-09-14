@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "LLM Inference & GPU Serving Platform"
 requires-python = ">=3.10,<3.11"
 dependencies = [
-    "vllm>=0.4.0",
     "torch>=2.1.0",
     "transformers>=4.38.0",
     "httpx>=0.27.0",
@@ -14,9 +13,25 @@ dependencies = [
     "uvicorn>=0.29.0",
 ]
 
+# Base dependencies above are exactly what's actually imported (or, for
+# uvicorn, required to run) across src/server/, src/baseline/,
+# benchmark/, and metrics/ — checked via grep across those directories,
+# not assumed. vllm is deliberately NOT in the base list: nothing in
+# those directories imports it today (src/server/main.py is still the
+# naive FastAPI baseline). It lives in the "vllm" extra below instead, so
+# docker/Dockerfile's image for that naive server doesn't pull it in.
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
+]
+# The vllm extra is intentionally kept separate from the base install.
+# It will be installed separately later, most likely in a different
+# environment (e.g. a cloud GPU instance) once the vLLM side of this
+# project actually starts, not as part of building this naive server's
+# container image (docker/Dockerfile installs only the base
+# dependencies). Install with: pip install .[vllm]
+vllm = [
+    "vllm>=0.4.0",
 ]
 
 [tool.setuptools.packages.find]
